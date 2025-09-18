@@ -1,0 +1,75 @@
+CREATE TABLE Cliente (
+id_cliente NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+nombre VARCHAR2(50) NOT NULL,
+apellido VARCHAR2(50) NOT NULL,
+rut_pasaporte   VARCHAR2(20) UNIQUE NOT NULL,
+email           VARCHAR2(100) UNIQUE NOT NULL,
+telefono        NUMBER,
+direccion       VARCHAR2(100),
+pais            VARCHAR2(50)
+);
+
+CREATE TABLE Usuario (
+  id_usuario NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  username   VARCHAR2(50) UNIQUE NOT NULL,
+  password   VARCHAR2(100) NOT NULL,
+  rol        VARCHAR2(30) CHECK (rol IN ('ADMIN', 'RECEPCIONISTA', 'GERENTE'))
+);
+
+
+CREATE TABLE Habitacion (
+id_habitacion       NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+numero_habitacion   VARCHAR2(10) UNIQUE NOT NULL,
+tipo                VARCHAR2(30) NOT NULL,
+capacidad           NUMBER CHECK (capacidad > 0),
+precio_noche        NUMBER(10,2) CHECK (precio_noche >= 0),
+estado              VARCHAR2(20) DEFAULT 'DISPONIBLE'
+);
+
+CREATE TABLE Reserva (
+id_reserva      NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+id_cliente      NUMBER NOT NULL,
+id_habitacion   NUMBER NOT NULL,
+fecha_reserva   DATE DEFAULT SYSDATE,
+fecha_checkin   DATE NOT NULL,
+fecha_checkout  DATE NOT NULL,
+estado_reserva  VARCHAR2(20) DEFAULT 'PENDIENTE',
+cantidad_personas NUMBER CHECK (cantidad_personas > 0),
+CONSTRAINT fk_cliente FOREIGN KEY (id_cliente) REFERENCES CLIENTE(id_cliente),
+CONSTRAINT fk_habitacion FOREIGN KEY (id_habitacion) REFERENCES HABITACION(id_habitacion)
+);
+
+CREATE TABLE Pago (
+id_pago      NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+id_reserva   NUMBER NOT NULL,
+monto_total  NUMBER(10,2) CHECK (monto_total >= 0),
+metodo_pago  VARCHAR2(30) NOT NULL,
+fecha_pago   DATE DEFAULT SYSDATE,
+estado_pago  VARCHAR2(20) DEFAULT 'PENDIENTE',
+CONSTRAINT fk_reserva FOREIGN KEY (id_reserva) REFERENCES RESERVA(id_reserva)
+);
+
+CREATE TABLE Servicio (
+  id_servicio NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre      VARCHAR2(50) NOT NULL,
+  descripcion VARCHAR2(200),
+  precio      NUMBER(10,2) CHECK (precio >= 0)
+);
+
+CREATE TABLE Reserva_Servicio (
+  id_reserva  NUMBER NOT NULL,
+  id_servicio NUMBER NOT NULL,
+  cantidad    NUMBER DEFAULT 1 CHECK (cantidad > 0),
+  CONSTRAINT pk_reserva_servicio PRIMARY KEY (id_reserva, id_servicio),
+  CONSTRAINT fk_reserva_serv FOREIGN KEY (id_reserva) REFERENCES Reserva(id_reserva),
+  CONSTRAINT fk_servicio FOREIGN KEY (id_servicio) REFERENCES Servicio(id_servicio)
+);
+
+CREATE TABLE Empleado (
+  id_empleado NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre      VARCHAR2(50) NOT NULL,
+  apellido    VARCHAR2(50) NOT NULL,
+  cargo       VARCHAR2(50) NOT NULL,
+  telefono    VARCHAR2(20),
+  email       VARCHAR2(100) UNIQUE
+);
