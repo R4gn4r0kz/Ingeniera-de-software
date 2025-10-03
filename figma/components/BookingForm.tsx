@@ -26,6 +26,9 @@ export interface BookingData {
   expiryDate: string;
   cvv: string;
   cardHolder: string;
+  rut?: string;
+  address?: string;
+  country?: string;
 }
 
 export function BookingForm({ room, searchData, onSubmit, onBack }: BookingFormProps) {
@@ -39,6 +42,9 @@ export function BookingForm({ room, searchData, onSubmit, onBack }: BookingFormP
     expiryDate: "",
     cvv: "",
     cardHolder: "",
+    rut: "",
+    address: "",
+    country: "",
   });
 
   const nights = Math.ceil(
@@ -117,6 +123,36 @@ export function BookingForm({ room, searchData, onSubmit, onBack }: BookingFormP
                     value={formData.phone}
                     onChange={(e) => handleInputChange("phone", e.target.value)}
                     required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="rut">RUT/Pasaporte (Opcional)</Label>
+                  <Input
+                    id="rut"
+                    value={formData.rut}
+                    onChange={(e) => handleInputChange("rut", e.target.value)}
+                    placeholder="12.345.678-9"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Dirección (Opcional)</Label>
+                  <Input
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => handleInputChange("address", e.target.value)}
+                    placeholder="Dirección completa"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="country">País (Opcional)</Label>
+                  <Input
+                    id="country"
+                    value={formData.country}
+                    onChange={(e) => handleInputChange("country", e.target.value)}
+                    placeholder="Chile"
                   />
                 </div>
               </div>

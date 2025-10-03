@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
 
 export type UserRole = "cliente" | "empleado" | "administrador";
 export type Language = "es" | "en";
@@ -21,6 +23,7 @@ interface AuthContextType {
   logout: () => void;
   setLanguage: (lang: Language) => void;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 interface RegisterData {
@@ -30,109 +33,209 @@ interface RegisterData {
   lastName: string;
   phone?: string;
   role: UserRole;
+  rut?: string;
+  address?: string;
+  country?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demonstration
-const mockUsers: (User & { password: string })[] = [
-  {
-    id: "1",
-    email: "admin@hotel.com",
-    password: "admin123",
-    firstName: "Admin",
-    lastName: "Hotel",
-    role: "administrador",
-    phone: "+56912345678",
-    registeredAt: "2024-01-01"
-  },
-  {
-    id: "2",
-    email: "empleado@hotel.com",
-    password: "emp123",
-    firstName: "Juan",
-    lastName: "Pérez",
-    role: "empleado",
-    phone: "+56987654321",
-    registeredAt: "2024-01-15"
-  },
-  {
-    id: "3",
-    email: "cliente@email.com",
-    password: "cliente123",
-    firstName: "María",
-    lastName: "González",
-    role: "cliente",
-    phone: "+56911111111",
-    registeredAt: "2024-02-01"
-  }
-];
+// Create Supabase client
+const supabase = createClient(
+  `https://${projectId}.supabase.co`,
+  publicAnonKey
+);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [language, setLanguage] = useState<Language>("es");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in from localStorage
-    const savedUser = localStorage.getItem("currentUser");
-    const savedLanguage = localStorage.getItem("preferredLanguage");
-    
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    
-    if (savedLanguage) {
-      setLanguage(savedLanguage as Language);
-    }
+    // Check for existing session
+    const checkSession = async () => {
+      try {
+        // Check for demo user first
+        const demoUser = localStorage.getItem("demoUser");
+        if (demoUser) {
+          setUser(JSON.parse(demoUser));
+          setLoading(false);
+          return;
+        }
+        
+        // Check Supabase session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          const userData: User = {
+            id: session.user.id,
+            email: session.user.email || "",
+            firstName: session.user.user_metadata?.first_name || "",
+            lastName: session.user.user_metadata?.last_name || "",
+            role: session.user.user_metadata?.role || "cliente",
+            registeredAt: session.user.created_at?.split('T')[0] || ""
+          };
+          setUser(userData);
+        }
+        
+        // Check saved language
+        const savedLanguage = localStorage.getItem("preferredLanguage");
+        if (savedLanguage) {
+          setLanguage(savedLanguage as Language);
+        }
+        
+      } catch (error) {
+        console.error("Error checking session:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkSession();
+
+    // Listen for auth changes (only for Supabase users)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Don't override demo users
+      const demoUser = localStorage.getItem("demoUser");
+      if (demoUser) return;
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        const userData: User = {
+          id: session.user.id,
+          email: session.user.email || "",
+          firstName: session.user.user_metadata?.first_name || "",
+          lastName: session.user.user_metadata?.last_name || "",
+          role: session.user.user_metadata?.role || "cliente",
+          registeredAt: session.user.created_at?.split('T')[0] || ""
+        };
+        setUser(userData);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const foundUser = mockUsers.find(u => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem("currentUser", JSON.stringify(userWithoutPassword));
-      return true;
+    try {
+      setLoading(true);
+      
+      // Check demo credentials first for better UX
+      const demoCredentials = {
+        'admin@hotel.com': { password: 'admin123', role: 'administrador', name: 'Admin Hotel' },
+        'empleado@hotel.com': { password: 'emp123', role: 'empleado', name: 'Juan Pérez' },
+        'cliente@email.com': { password: 'cliente123', role: 'cliente', name: 'María González' }
+      };
+      
+      const demo = demoCredentials[email as keyof typeof demoCredentials];
+      if (demo && demo.password === password) {
+        const userData: User = {
+          id: `demo-${demo.role}`,
+          email,
+          firstName: demo.name.split(' ')[0],
+          lastName: demo.name.split(' ')[1] || '',
+          role: demo.role as UserRole,
+          registeredAt: "2024-01-01"
+        };
+        setUser(userData);
+        localStorage.setItem("demoUser", JSON.stringify(userData));
+        return true;
+      }
+      
+      // Try Supabase Auth for real users
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (!error && data.user) {
+          const userData: User = {
+            id: data.user.id,
+            email: data.user.email || "",
+            firstName: data.user.user_metadata?.first_name || "",
+            lastName: data.user.user_metadata?.last_name || "",
+            role: data.user.user_metadata?.role || "cliente",
+            registeredAt: data.user.created_at?.split('T')[0] || ""
+          };
+          setUser(userData);
+          return true;
+        }
+      } catch (supabaseError) {
+        console.log("Supabase auth not available, using demo mode only");
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Login error:", error);
+      return false;
+    } finally {
+      setLoading(false);
     }
-    
-    return false;
   };
 
   const register = async (userData: RegisterData): Promise<boolean> => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Check if user already exists
-    const existingUser = mockUsers.find(u => u.email === userData.email);
-    if (existingUser) {
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-c8bcc102/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({
+          email: userData.email,
+          password: userData.password,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          phone: userData.phone,
+          role: userData.role,
+          rut_pasaporte: userData.rut,
+          direccion: userData.address,
+          pais: userData.country
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok && result.user) {
+        // Auto login after successful registration
+        const loginSuccess = await login(userData.email, userData.password);
+        return loginSuccess;
+      }
+      
       return false;
+    } catch (error) {
+      console.error("Registration error:", error);
+      return false;
+    } finally {
+      setLoading(false);
     }
-    
-    const newUser: User = {
-      id: (mockUsers.length + 1).toString(),
-      email: userData.email,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      role: userData.role,
-      phone: userData.phone,
-      registeredAt: new Date().toISOString().split('T')[0]
-    };
-    
-    // Add to mock users
-    mockUsers.push({ ...newUser, password: userData.password });
-    
-    setUser(newUser);
-    localStorage.setItem("currentUser", JSON.stringify(newUser));
-    return true;
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("currentUser");
+  const logout = async () => {
+    try {
+      setLoading(true);
+      
+      // Check if it's a demo user
+      const demoUser = localStorage.getItem("demoUser");
+      if (demoUser) {
+        localStorage.removeItem("demoUser");
+        setUser(null);
+        return;
+      }
+      
+      // Logout from Supabase
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSetLanguage = (lang: Language) => {
@@ -148,7 +251,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       setLanguage: handleSetLanguage,
-      isAuthenticated: !!user
+      isAuthenticated: !!user,
+      loading
     }}>
       {children}
     </AuthContext.Provider>

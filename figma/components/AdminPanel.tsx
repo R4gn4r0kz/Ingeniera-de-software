@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useHotelData } from "./useHotelData";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -75,9 +76,31 @@ const mockRoomPrices = [
 export function AdminPanel() {
   const { language } = useAuth();
   const t = useTranslations(language);
+  const { 
+    rooms, 
+    reservas, 
+    loading, 
+    error,
+    fetchRooms, 
+    fetchReservations, 
+    getAdminStats 
+  } = useHotelData();
   const [roomPrices, setRoomPrices] = useState(mockRoomPrices);
   const [reportDateFrom, setReportDateFrom] = useState("");
   const [reportDateTo, setReportDateTo] = useState("");
+  const [stats, setStats] = useState<any>(null);
+
+  useEffect(() => {
+    // Load initial data
+    fetchRooms();
+    fetchReservations();
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    const adminStats = await getAdminStats();
+    setStats(adminStats);
+  };
 
   const handlePriceUpdate = (roomId: string, newPrice: number) => {
     setRoomPrices(prev => prev.map(room => 
@@ -168,32 +191,54 @@ export function AdminPanel() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockBookings.map((booking) => (
-                    <TableRow key={booking.id}>
-                      <TableCell>{booking.id}</TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{booking.guestName}</p>
-                          <p className="text-sm text-muted-foreground">{booking.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{booking.room}</TableCell>
-                      <TableCell>{new Date(booking.checkIn).toLocaleDateString()}</TableCell>
-                      <TableCell>{new Date(booking.checkOut).toLocaleDateString()}</TableCell>
-                      <TableCell>${booking.total.toLocaleString()}</TableCell>
-                      <TableCell>{getStatusBadge(booking.status)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center">
+                        Cargando reservas...
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : reservas.length > 0 ? (
+                    reservas.map((reserva) => (
+                      <TableRow key={reserva.id_reserva}>
+                        <TableCell>RES-{reserva.id_reserva.toString().padStart(6, '0')}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">
+                              {reserva.cliente?.nombre} {reserva.cliente?.apellido}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{reserva.cliente?.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {reserva.habitacion?.numero_habitacion} - {reserva.habitacion?.tipo}
+                        </TableCell>
+                        <TableCell>{new Date(reserva.fecha_checkin).toLocaleDateString()}</TableCell>
+                        <TableCell>{new Date(reserva.fecha_checkout).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          ${((reserva.habitacion?.precio_noche || 0) * 
+                            Math.ceil((new Date(reserva.fecha_checkout).getTime() - new Date(reserva.fecha_checkin).getTime()) / (1000 * 60 * 60 * 24))
+                          ).toLocaleString()}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(reserva.estado_reserva.toLowerCase())}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center">
+                        No hay reservas registradas
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
