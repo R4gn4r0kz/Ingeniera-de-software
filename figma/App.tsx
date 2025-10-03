@@ -1,86 +1,47 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./components/AuthContext";
 import { SearchForm, SearchData } from "./components/SearchForm";
-import { RoomCard, Room } from "./components/RoomCard";
+import { RoomCard } from "./components/RoomCard";
 import { BookingForm, BookingData } from "./components/BookingForm";
 import { BookingConfirmation } from "./components/BookingConfirmation";
 import { QRTicket } from "./components/QRTicket";
 import { LoginForm } from "./components/LoginForm";
 import { AdminPanel } from "./components/AdminPanel";
 import { EmployeePanel } from "./components/EmployeePanel";
+import { DownloadGuide } from "./components/DownloadGuide";
 import { Button } from "./components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { useTranslations } from "./components/translations";
-import { ArrowLeft, Hotel, User, LogOut, Languages } from "lucide-react";
+import { useHotelData, Room } from "./components/useHotelData";
+import { ArrowLeft, Hotel, User, LogOut, Languages, Loader2, Database } from "lucide-react";
 
-// Mock data for available rooms
-const mockRooms: Room[] = [
-  {
-    id: "1",
-    name: "Habitación Estándar",
-    type: "Habitación con vista al jardín",
-    price: 85000,
-    maxGuests: 2,
-    beds: 1,
-    size: 25,
-    image: "https://images.unsplash.com/photo-1659177567968-220c704d58a3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdGFuZGFyZCUyMGhvdGVsJTIwcm9vbSUyMGludGVyaW9yfGVufDF8fHx8MTc1NzYyNzY4MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    amenities: ["wifi", "tv", "breakfast"],
-    available: true,
-  },
-  {
-    id: "2",
-    name: "Habitación Deluxe",
-    type: "Habitación con vista al mar",
-    price: 120000,
-    maxGuests: 3,
-    beds: 1,
-    size: 35,
-    image: "https://images.unsplash.com/photo-1626868449668-fb47a048d9cb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBob3RlbCUyMHJvb20lMjBiZWR8ZW58MXx8fHwxNzU3NTUzMjgyfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    amenities: ["wifi", "tv", "breakfast", "parking"],
-    available: true,
-  },
-  {
-    id: "3",
-    name: "Suite Ejecutiva",
-    type: "Suite con sala de estar separada",
-    price: 180000,
-    maxGuests: 4,
-    beds: 2,
-    size: 55,
-    image: "https://images.unsplash.com/photo-1698870157085-11632d2ddef8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxob3RlbCUyMHN1aXRlJTIwbGl2aW5nJTIwcm9vbXxlbnwxfHx8fDE3NTc2Mjc2ODJ8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    amenities: ["wifi", "tv", "breakfast", "parking"],
-    available: true,
-  },
-  {
-    id: "4",
-    name: "Habitación Familiar",
-    type: "Habitación con camas adicionales",
-    price: 95000,
-    maxGuests: 6,
-    beds: 3,
-    size: 45,
-    image: "https://images.unsplash.com/photo-1659177567968-220c704d58a3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdGFuZGFyZCUyMGhvdGVsJTIwcm9vbSUyMGludGVyaW9yfGVufDF8fHx8MTc1NzYyNzY4MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    amenities: ["wifi", "tv", "breakfast"],
-    available: false,
-  },
-];
-
-type AppState = "search" | "rooms" | "booking" | "confirmation" | "ticket" | "admin" | "employee";
+type AppState = "search" | "rooms" | "booking" | "confirmation" | "ticket" | "admin" | "employee" | "setup";
 
 function AppContent() {
-  const { user, isAuthenticated, logout, language, setLanguage } = useAuth();
+  const { user, isAuthenticated, logout, language, setLanguage, loading: authLoading } = useAuth();
   const t = useTranslations(language);
+  const { 
+    rooms, 
+    loading: hotelLoading, 
+    error: hotelError,
+    fetchRooms, 
+    createReservation 
+  } = useHotelData();
+  
   const [currentState, setCurrentState] = useState<AppState>("search");
   const [searchData, setSearchData] = useState<SearchData | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [bookingData, setBookingData] = useState<BookingData | null>(null);
-  const [reservationId] = useState(() => 
-    'RES-' + Math.random().toString(36).substr(2, 9).toUpperCase()
-  );
+  const [reservationId, setReservationId] = useState<string>('');
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
 
-  const handleSearch = (data: SearchData) => {
+  const handleSearch = async (data: SearchData) => {
     setSearchData(data);
     setCurrentState("rooms");
+    
+    // Fetch available rooms for the selected dates
+    const rooms = await fetchRooms(data.checkIn, data.checkOut, data.guests);
+    setAvailableRooms(rooms);
   };
 
   const handleRoomSelect = (room: Room) => {
@@ -88,9 +49,33 @@ function AppContent() {
     setCurrentState("booking");
   };
 
-  const handleBookingSubmit = (data: BookingData) => {
-    setBookingData(data);
-    setCurrentState("confirmation");
+  const handleBookingSubmit = async (data: BookingData) => {
+    if (!selectedRoom || !searchData) return;
+    
+    try {
+      const reservationData = await createReservation(
+        selectedRoom.id,
+        searchData.checkIn,
+        searchData.checkOut,
+        searchData.guests,
+        {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          phone: data.phone,
+          rut: data.rut,
+          address: data.address,
+          country: data.country
+        }
+      );
+      
+      setBookingData(data);
+      setReservationId(reservationData.reservationId);
+      setCurrentState("confirmation");
+    } catch (error) {
+      console.error('Error creating reservation:', error);
+      // Handle error - could show a toast or error message
+    }
   };
 
   const handleViewTicket = () => {
@@ -131,6 +116,18 @@ function AppContent() {
       setCurrentState("employee");
     }
   };
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto" />
+          <p>Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Si no está autenticado, mostrar pantalla de login
   if (!isAuthenticated) {
@@ -203,6 +200,17 @@ function AppContent() {
                 </SelectContent>
               </Select>
 
+              {/* Setup Database Button */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setCurrentState("setup")}
+                className="flex items-center gap-2"
+              >
+                <Database className="w-4 h-4" />
+                Setup DB
+              </Button>
+
               {/* User Menu */}
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={getRoleBasedDashboard}>
@@ -251,18 +259,41 @@ function AppContent() {
                 }
               </p>
             </div>
+            
+            {hotelLoading && (
+              <div className="text-center">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                <p className="mt-2">Buscando habitaciones disponibles...</p>
+              </div>
+            )}
+            
+            {hotelError && (
+              <div className="text-center text-red-500">
+                <p>Error: {hotelError}</p>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mockRooms
-                .filter(room => room.maxGuests >= searchData.guests)
-                .map((room) => (
-                  <RoomCard
-                    key={room.id}
-                    room={room}
-                    nights={calculateNights()}
-                    onSelect={handleRoomSelect}
-                  />
-                ))}
+              {availableRooms.map((room) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  nights={calculateNights()}
+                  onSelect={handleRoomSelect}
+                />
+              ))}
             </div>
+            
+            {!hotelLoading && availableRooms.length === 0 && !hotelError && (
+              <div className="text-center">
+                <p className="text-muted-foreground">
+                  {language === "es" 
+                    ? "No hay habitaciones disponibles para las fechas seleccionadas"
+                    : "No rooms available for the selected dates"
+                  }
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -326,6 +357,10 @@ function AppContent() {
 
         {currentState === "employee" && user?.role === "empleado" && (
           <EmployeePanel />
+        )}
+
+        {currentState === "setup" && (
+          <DownloadGuide />
         )}
       </main>
 
